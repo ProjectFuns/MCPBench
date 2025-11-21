@@ -212,7 +212,7 @@ class EvaluateBench(ABC):
             num_threads=self.num_threads,
             display_progress=True,
             max_errors=5000,
-            return_outputs=True,
+            # return_outputs=True,
             provide_traceback=True,
         )
 
@@ -235,9 +235,17 @@ class EvaluateBench(ABC):
 
     def evaluate_baseline(self, dspy_config=None) -> EvaluationResult:
         with dspy.context(**dspy_config):
-            score, info = self.evaluate_prog(self.program)
+            eval_result = self.evaluate_prog(self.program)
         result = self.get_empty_results()
-        datasets, outputs, _ = zip(*info)
+        
+        # eval_result is an EvaluationResult object with:
+        # - score: float (percentage score)
+        # - results: list of (example, prediction, score) tuples
+        score = eval_result.score
+        results = eval_result.results
+        
+        # Unpack results: each element is (example, prediction, score)
+        datasets, outputs, _ = zip(*results)
         managers = [one.process_report for one in outputs]
 
         result.score = score   

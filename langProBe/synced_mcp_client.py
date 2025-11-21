@@ -17,13 +17,14 @@ class SyncedMcpClient(Process):
     and communicates with it using multiprocessing Queues and pickle.
     """
 
-    def __init__(self, server_url: str = None):
+    def __init__(self, server_url: str = None, headers: dict = None):
         super().__init__()
         # turn off logging from the logger of 'httpx'
         httpx_logger = logging.getLogger("httpx")
         httpx_logger.setLevel(logging.WARNING)
 
         self.server_url = server_url
+        self.headers = headers
         self.request_queue = Queue()
         self.response_queue = Queue()
         self.is_running = False
@@ -46,8 +47,8 @@ class SyncedMcpClient(Process):
         """
         from .async_mcp_client import AsyncMCPClient
 
-        client = AsyncMCPClient()
-        await client.connect_to_sse_server(server_url=self.server_url)
+        client = AsyncMCPClient(headers=self.headers)
+        await client.connect_to_streamable_http_server(server_url=self.server_url, headers=self.headers)
 
         try:
             while self.is_running:

@@ -1,0 +1,13 @@
+{
+    "mcp_pool": [
+        {
+            "name": "aisearch-mcp-server",
+            "type": "streamableHttp",
+            "description": "搜索实时信息，支持使用大模型进行总结回复。",
+            "url": "https://qianfan.baidubce.com/v2/ai_search/mcp",
+            "headers": {
+                "Authorization": "Bearer"
+            }
+        }
+    ]
+}

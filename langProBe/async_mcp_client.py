@@ -1,44 +1,67 @@
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Optional
 
 from anthropic import Anthropic
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 
 
 class AsyncMCPClient:
 
-    def __init__(self):
+    def __init__(self, headers: dict = None):
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self.anthropic = Anthropic()
+        self.headers = headers
 
-    async def connect_to_sse_server(self, server_url: str):
-        """Connect to an MCP server running with SSE transport"""
-        # Store the context managers so they stay alive
-        self._streams_context = sse_client(url=server_url)
+    async def connect_to_streamable_http_server(self, server_url: str, headers: dict = None):
+        """Connect to an MCP server running with streamable http transport"""
+        # Use headers parameter if provided, otherwise use self.headers
+        if headers is None:
+            headers = self.headers
+        
+        # streamablehttp_client is decorated with @asynccontextmanager
+        # It returns an async context manager that yields a tuple
+        self._streams_context = streamablehttp_client(url=server_url, headers=headers)
+        
+        # Directly call __aenter__ to get the streams tuple
+        # This avoids any potential issues with AsyncExitStack
         streams = await self._streams_context.__aenter__()
-
-        self._session_context = ClientSession(*streams)
-        self.session: ClientSession = await self._session_context.__aenter__()
+        
+        # Register the exit to be called during cleanup
+        # push_async_exit can accept the context manager object itself
+        self.exit_stack.push_async_exit(self._streams_context)
+        
+        # streams should be a tuple of (read_stream, write_stream, get_session_id_callback)
+        if not isinstance(streams, tuple):
+            raise ValueError(f"Expected tuple, got {type(streams)}: {streams}")
+        if len(streams) != 3:
+            raise ValueError(f"Expected tuple of 3 elements, got {len(streams)} elements: {streams}")
+        
+        read_stream, write_stream, get_session_id_callback = streams
+        self._get_session_id_callback = get_session_id_callback
+        
+        # Create and enter the ClientSession context
+        self._session_context = ClientSession(read_stream, write_stream)
+        self.session: ClientSession = await self.exit_stack.enter_async_context(self._session_context)
 
         # Initialize
         await self.session.initialize()
 
         # List available tools to verify connection
-        # print("Initialized SSE client...")
-        # print("Listing tools...")
+        print("Initialized SSE client...")
+        print("Listing tools...")
         response = await self.session.list_tools()
         tools = response.tools
-        # print("\nConnected to server with tools:", [tool.name for tool in tools])
+        print("\nConnected to server with tools:", [tool.name for tool in tools])
+
 
     async def cleanup(self):
         """Properly clean up the session and streams"""
-        if self._session_context:
-            await self._session_context.__aexit__(None, None, None)
-        if self._streams_context:
-            await self._streams_context.__aexit__(None, None, None)
+        # AsyncExitStack will automatically clean up all entered contexts
+        # This includes both the streams context and the session context
+        await self.exit_stack.aclose()
 
     async def call_tool(self, tool_name: str, tool_args: dict) -> dict:
         """Call a tool with the given arguments"""

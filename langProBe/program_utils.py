@@ -161,13 +161,14 @@ def build_system_content(base_system: str,
         if mcp['name'] in ['wuying-agentbay-mcp-server', 'Playwright']:
             tools_section += f"当使用本server来执行搜索任务时，请以https://www.baidu.com为初始网站进行搜索。"
         url = mcp.get("url")
+        headers = mcp.get("headers", {})
         if not url:
             try:
                 port = mcp.get('run_config')[0]["port"]
                 url = f"http://localhost:{port}/sse"
             except:
                 raise Exception("No url found")
-        client = SyncedMcpClient(server_url=url)
+        client = SyncedMcpClient(server_url=url, headers=headers)
         try:
             result = client.list_tools()
             tools = result.tools
@@ -319,14 +320,19 @@ def mcp_calling(
                 target_name = mcp_server_name
                 port = None
                 url = None
+                headers = {}  # Initialize headers before the loop
                 for item in parsed_data.get("mcp_pool", []):
                     if item.get("name") != target_name:
                         continue
 
+                    # Get headers from the item (should be done before break)
+                    headers = item.get("headers", {})
+                    
                     url = item.get("url", "")
                     if url:
                         logger.debug(f"ID:{manager.id}, Found URL for MCP Server '{target_name}': {url}")
                         break
+                    
                     run_configs = item.get("run_config", [])
                     for config in run_configs:
                         port = config.get("port")
@@ -341,7 +347,7 @@ def mcp_calling(
                     logger.error(f"ID:{manager.id}, No valid URL found for MCP Server '{target_name}'.")
                     raise ValueError(f"ID:{manager.id}, No valid URL found for MCP Server '{target_name}'.")
 
-                client = SyncedMcpClient(server_url=url)
+                client = SyncedMcpClient(server_url=url, headers=headers)
                 logger.debug(f"ID:{manager.id}, Initialized SyncedMcpClient with URL: {url}")
                 client.list_tools()
                 logger.debug(f"ID:{manager.id}, Retrieved tool list from MCP Server '{target_name}'.")
